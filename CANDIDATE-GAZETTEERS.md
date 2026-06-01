@@ -137,7 +137,7 @@ Each candidate is listed in compact form:
 
 ### British Isles (comparators)
 
-- **[Index Villaris](https://archive.org/download/bookofbritishtop00andeuoft/bookofbritishtop00andeuoft.pdf)** — John Adams, 1680. England and Wales. **Status:** bibliographic references; exact scan of Index Villaris to locate/confirm. **Next:** locate full scan and compare to existing WHG Index Villaris ingestion. *Britain; parish; early modern; model source.*
+- **[Index Villaris](https://archive.org/download/bookofbritishtop00andeuoft/bookofbritishtop00andeuoft.pdf)** — John Adams, 1680. England and Wales. **Status:** Already indexed using geolocated transcript by Stephen Gadd and Alexis Litvine.
 - **[England's Gazetteer / New Index Villaris](https://archive.org/stream/englandsgazettee01whatiala/englandsgazettee01whatiala_djvu.txt)** — Stephen Whatley / related compilers, 1751. England and Wales, multi-volume. **Status:** full text/scans via IA. **Next:** use as a methodological comparator, not the highest gap priority. *Britain; village; parish; early modern.*
 - **[History, Gazetteer, and Directory of Suffolk](https://www.loc.gov/resource/gdcmassbookdig.historygazetteer00whit_0/?st=pdf)** — William White, 1855. County of Suffolk. **Status:** LOC PDF available. **Next:** keep as a reference candidate for the blog's "local knowledge" framing. *Britain; county; directory.*
 - **[The Parliamentary Gazetteer of Ireland](https://archive.org/details/parliamentaryga00unkngoog)** — A. Fullarton & Co., 1846. Ireland. **Status:** PDF and text downloads available. **Next:** prioritise as a UK / Ireland comparator. *UK / Ireland; global comparator; colonial.*
