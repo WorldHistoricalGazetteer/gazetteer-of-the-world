@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this pipeline or its outputs, please cite it as below."
+title: "Gazetteer of the World → Linked Data: an OCR-to-linked-data pipeline for the 1856 RGS Gazetteer"
+abstract: >-
+  A documented pipeline turning a 19th-century printed gazetteer into a
+  structured, AAT-typed, geolocated authority gazetteer for the World
+  Historical Gazetteer. The source is the Royal Geographical Society's
+  "A Gazetteer of the World, or Dictionary of Geographical Knowledge"
+  (Edinburgh: A. Fullarton & Co., 1856), 7 vols. Public-domain first-edition
+  page images are OCRed with a layout-aware model (Surya) on a GPU cluster,
+  parsed into per-record entries with page-level provenance, typed against
+  validated Getty AAT identifiers via LLM extraction, and reconciled against
+  the WHG index. Note that the working pipeline depends on University of
+  Pittsburgh CRC infrastructure (Slurm + vLLM) and WHG's Elasticsearch
+  gateway, so it is not turn-key reproducible outside that environment; it is
+  best read as a thoroughly documented record of how this gazetteer was
+  digitised and ingested, and as a design reference for comparable
+  infrastructure.
+type: software
+authors:
+  - family-names: Gadd
+    given-names: Stephen
+    orcid: "https://orcid.org/0000-0003-3060-0181"
+    affiliation: "World Historical Gazetteer, University of Pittsburgh; Docuracy Ltd"
+version: 1.0.0
+date-released: 2026-07-29
+license: BSD-3-Clause
+repository-code: "https://github.com/WorldHistoricalGazetteer/gazetteer-of-the-world"
+url: "https://whgazetteer.org"
+keywords:
+  - historical gazetteer
+  - OCR
+  - linked open data
+  - Getty AAT
+  - reconciliation
+  - digital humanities
+  - Royal Geographical Society
+  - text extraction

@@ -1,0 +1,37 @@
+{
+  "title": "Gazetteer of the World → Linked Data: an OCR-to-linked-data pipeline for the 1856 RGS Gazetteer",
+  "description": "<p>A documented pipeline turning a 19th-century printed gazetteer into a structured, AAT-typed, geolocated <strong>authority gazetteer</strong> for the <a href=\"https://whgazetteer.org/\">World Historical Gazetteer</a> (WHG).</p><p><strong>Source.</strong> Royal Geographical Society, <em>A Gazetteer of the World, or Dictionary of Geographical Knowledge</em> (Edinburgh: A. Fullarton &amp; Co., 1856), 7 vols. The work was published anonymously — \"edited by a Member of the Royal Geographical Society\" — so the RGS is cited as the corporate author; the anonymous editor is identified as George Godfrey Cunningham.</p><p><strong>Pipeline.</strong> Public-domain first-edition page images (HathiTrust vols 1–7) are OCRed with a layout-aware model (Surya) on a GPU cluster, parsed into one record per source entry with page-level provenance, typed against validated Getty AAT identifiers via structured LLM extraction, and reconciled against the WHG index. Volume VII's Appendix yields a bidirectional ancient-to-modern toponym concordance.</p><p><strong>Scope note.</strong> The working pipeline depends on University of Pittsburgh CRC infrastructure (Slurm + vLLM for self-hosted OCR and LLMs) and WHG's own Elasticsearch gateway. It is therefore <em>not turn-key reproducible</em> by an outside researcher, and is best read as a thoroughly documented record of how this specific gazetteer is being digitised and ingested into WHG, and as a design reference for anyone with comparable infrastructure. The shape of the pipeline (OCR → parse → typed LLM extraction → reconciliation) generalises; the implementation assumes the cluster.</p>",
+  "upload_type": "software",
+  "version": "1.0.0",
+  "license": "bsd-3-clause",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Gadd, Stephen",
+      "affiliation": "World Historical Gazetteer, University of Pittsburgh; Docuracy Ltd",
+      "orcid": "0000-0003-3060-0181"
+    }
+  ],
+  "keywords": [
+    "historical gazetteer",
+    "OCR",
+    "linked open data",
+    "Getty AAT",
+    "reconciliation",
+    "digital humanities",
+    "Royal Geographical Society",
+    "text extraction"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://whgazetteer.org",
+      "relation": "isPartOf",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://archive.org/details/agazetteerworld00unkngoog",
+      "relation": "isDerivedFrom",
+      "scheme": "url"
+    }
+  ]
+}
