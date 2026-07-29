@@ -1,7 +1,18 @@
 # Gazetteer of the World → Linked Data
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21693496.svg)](https://doi.org/10.5281/zenodo.21693496)
+[![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-informational)](./LICENSE)
+
 Turning a 19th-century printed gazetteer into a structured, AAT-typed, geolocated
 **authority gazetteer** for the [World Historical Gazetteer](https://whgazetteer.org/) (WHG).
+
+**How to cite.** Every tagged release is archived on Zenodo. Cite the **concept DOI**, which always
+resolves to the latest version:
+
+> Gadd, Stephen. 2026. *Gazetteer of the World → Linked Data: an OCR-to-linked-data pipeline for the
+> 1856 RGS Gazetteer*. Zenodo. https://doi.org/10.5281/zenodo.21693496
+
+Machine-readable metadata is in [CITATION.cff](CITATION.cff).
 
 > **Scope note.** This began as a portable, locally-runnable recipe, but the working pipeline now
 > depends on **Pitt CRC infrastructure** — a GPU cluster (Slurm + vLLM) for self-hosted OCR and LLMs,
