@@ -590,22 +590,52 @@ def resolve_hierarchy(rows, threshold, concurrency=12, con=None):
 
 
 def run_pass_gateway(rows, pass_cfg, radius_km, threshold, concurrency, parents_by_pid):
-    items = [(r, _gw_request(r, pass_cfg, parents_by_pid.get(r["place_id"], []), radius_km)) for r in rows]
-    items = [(r, b) for r, b in items if b is not None]
+    """One POST per DISTINCT request body, fanned back to every place that asked it.
+
+    The gateway's /api/reconcile takes a single `query` — there is no batch form, so a full-corpus run
+    is ~340k individual POSTs and the only lever we have is asking fewer questions. Two places both
+    called "Richmond" in the US, under the same resolved parent, produce byte-identical requests; the
+    old code sent both. Measured on this corpus: 104,744 name-cascade places collapse to 90,855
+    distinct units, so 13.3% of leaf traffic was re-asking questions already answered.
+
+    This is Map-your-Data's `mergeSig` rule and place#235's argument, whose stated point is cost
+    landing "on the gateway — our side". It changes no result: MyD's rule that identical names are
+    never MERGED is about the decision, not the query, and our cascade picks the top candidate
+    deterministically, so a shared response yields the same outcome for every row that asked. Each
+    place still gets its own candidate dict (copied, not aliased) and its own row.
+
+    Grouping is on the full serialised body, not just the name, so anything that differentiates the
+    question — country, containment parent, mode, bounds — correctly splits the group."""
+    groups = {}                       # serialised body -> (body, [place_id …])
+    n_rows = 0
+    for r in rows:
+        body = _gw_request(r, pass_cfg, parents_by_pid.get(r["place_id"], []), radius_km)
+        if body is None:
+            continue                  # pass cannot apply here; the place falls through to a later one
+        n_rows += 1
+        key = json.dumps(body, sort_keys=True, ensure_ascii=False)
+        groups.setdefault(key, (body, []))[1].append(r["place_id"])
     best = {}
+    if not groups:
+        return best
+    saved = n_rows - len(groups)
+    if saved:
+        print(f"  {len(groups):,} distinct queries for {n_rows:,} places "
+              f"({saved:,} duplicate requests not sent)", flush=True)
 
     def work(item):
-        r, body = item
-        return r["place_id"], _post(f"{GATEWAY_URL}/api/reconcile", body)
+        body, pids = item
+        return pids, _post(f"{GATEWAY_URL}/api/reconcile", body)
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        for fut in as_completed([pool.submit(work, it) for it in items]):
-            pid, resp = fut.result()
+        for fut in as_completed([pool.submit(work, v) for v in groups.values()]):
+            pids, resp = fut.result()
             if not resp or "_error" in resp:
                 continue
             cand = _gw_top(resp.get("hits") or [], threshold, pass_cfg[0])
             if cand:
-                best[pid] = cand
+                for pid in pids:
+                    best[pid] = dict(cand)      # per-place copy: never share a mutable candidate
     return best
 
 
