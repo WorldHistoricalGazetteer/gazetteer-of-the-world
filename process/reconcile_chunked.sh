@@ -41,8 +41,18 @@ MAX_WAITS="${MAX_WAITS:-72}"   # give up after this many consecutive back-offs (
 
 cd "$(dirname "$0")/.."
 
+# NOTE (2026-09-05, measured): the median-of-three does NOT protect against a COLD start. On the
+# first probe of a fresh job the gateway measured 0.45s and the job stood down for 300s, while 18
+# probes taken moments later from the same host all read 0.10-0.13s. A cold start slows all three
+# samples together, so taking a median of them changes nothing — the samples are correlated, which
+# is exactly the case a median cannot help with. It self-corrects on the next cycle and costs only
+# one BACKOFF, so it is not worth restarting a run over; but a warm-up query whose result is
+# DISCARDED, taken once before the loop begins, would remove it. Do not add that mid-run: bash
+# reads a script incrementally as it executes, so editing this file while a job is running it can
+# corrupt the run.
 probe() {
-  # Median of three, so one cold or unlucky sample cannot swing the decision either way.
+  # Median of three, so one unlucky sample cannot swing the decision. See the note above for the
+  # case it does not cover.
   local a b c
   a=$(curl -s -o /dev/null -w '%{time_total}' --max-time 20 -X POST "$GW/api/search" \
         -H 'Content-Type: application/json' -d '{"query":"Canterbury","mode":"fuzzy","size":10}' 2>/dev/null || echo 99)
