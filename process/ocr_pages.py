@@ -16,8 +16,8 @@ Two page sources:
 4-column index of the 1908 Atlas of the Chinese Empire (~1,800 px page width, ~6 pt type), Surya at
 native resolution against the same pages upscaled 2x with Lanczos:
 
-    native  6,517 index entries recovered, 0.84% alphabetical inversions
-    2x      4,625 index entries recovered, 6.1%  alphabetical inversions
+    native  6,517 index entries recovered, 0.94% alphabetical inversions
+    2x      4,865 index entries recovered, 9.3%  alphabetical inversions
 
 Upscaling made it WORSE, and not marginally. The failure is not recognition but detection: at 2x,
 Surya merged line boxes ACROSS the vertical column rules far more often, so rows from adjacent
