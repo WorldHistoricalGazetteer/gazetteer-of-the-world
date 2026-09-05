@@ -746,6 +746,13 @@ def reconcile(con, rows, backend, threshold, radius_km, concurrency, tok=None, h
         warm = load_parent_cache(con)
         print(f"resolving admin hierarchies (by depth, parallel within each) — "
               f"{warm} parents restored from cache …", flush=True)
+        # Deliberately the SAME concurrency as the match passes. Parent lookups are gateway
+        # queries like any other, so giving this stage its own higher setting would multiply the
+        # load the latency controller is there to cap — on the host that serves the public site.
+        # At --concurrency 1 that does put this stage back to single-threaded, which is the
+        # ~12.6h regime described above; that is the price of not being felt by live visitors,
+        # and it is already reflected in the measured chunk throughput. Do not "fix" it by
+        # decoupling the two without re-measuring live latency first.
         parents_by_pid, relations = resolve_hierarchy(rows, threshold, concurrency, con)
         resolved = sum(1 for v in _PARENT_CACHE.values() if v)
         by_mode = {m: sum(1 for v in _PARENT_CACHE.values() if v and v.get("mode") == m)
