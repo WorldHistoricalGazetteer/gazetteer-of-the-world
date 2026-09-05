@@ -438,7 +438,7 @@
   // clean point/heatmap view when zoomed out and reveals real boundaries as you zoom. The SELECTED place's
   // geometry is redrawn BOLD (solid line + light fill) in the pin's orange (set on popup open, cleared on close).
   const GEOM_MINZOOM = 5;
-  const NO_GEOM = ["==", ["get", "whg_id"], " "];   // matches nothing -> highlight hidden until a place is selected
+  const NO_GEOM = ["==", ["get", "whg_id"], "__none__"];   // matches nothing -> highlight hidden until a place is selected
   const GEOM_LINE = { "line-color": "#0369a1", "line-dasharray": [2.5, 2],
     "line-opacity": ["interpolate",["linear"],["zoom"], 5,0, 6,.55],
     "line-width": ["interpolate",["linear"],["zoom"], 6,.5, 10,1.4] };
