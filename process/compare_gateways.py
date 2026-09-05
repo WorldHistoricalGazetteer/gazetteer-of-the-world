@@ -68,16 +68,24 @@ def main():
     sample = rows[:a.n]
 
     # Span the cascade deliberately: an easy-query gate passes on a broken endpoint.
+    # Labelled, because WHICH shape diverges is diagnostic. If divergence concentrates in the
+    # lexical shape and is near-absent in the vector-led ones, that points at shard-level term
+    # statistics (a restore purges deleted docs, and deleted-but-unmerged docs still contribute to
+    # IDF, so BM25 scores differ slightly). If it is spread evenly across all three, that
+    # explanation is wrong. NB "phonetic" is blended rather than pure KNN on this gateway, so it is
+    # a weaker contrast than it looks.
     shapes = [
-        lambda q, cc: {"query": q, "mode": "exact", "size": 10},
-        lambda q, cc: {"query": q, "mode": "phonetic", "size": 10},
-        lambda q, cc: ({"query": q, "mode": "phonetic", "size": 10, "ccodes": [cc]} if cc else None),
+        ("exact/lexical", lambda q, cc: {"query": q, "mode": "exact", "size": 10}),
+        ("phonetic", lambda q, cc: {"query": q, "mode": "phonetic", "size": 10}),
+        ("phonetic+cc", lambda q, cc: ({"query": q, "mode": "phonetic", "size": 10, "ccodes": [cc]} if cc else None)),
     ]
 
     ab_order = ab_set = ctl_order = ctl_set = tot = err = 0
+    per = {}          # shape -> [n, order_same, set_same]
     examples = []
     for i, (name, cc) in enumerate(sample):
-        body = shapes[i % len(shapes)](name, cc)
+        label, fn = shapes[i % len(shapes)]
+        body = fn(name, cc)
         if body is None:
             continue
         try:
@@ -94,6 +102,10 @@ def main():
         ab_set += (set(p1) == set(st))
         ctl_order += (p1 == p2)
         ctl_set += (set(p1) == set(p2))
+        row = per.setdefault(label, [0, 0, 0])
+        row[0] += 1
+        row[1] += (p1 == st)
+        row[2] += (set(p1) == set(st))
         if set(p1) != set(st) and len(examples) < 8:
             only_p = [x for x in p1 if x not in set(st)]
             only_s = [x for x in st if x not in set(p1)]
@@ -107,6 +119,12 @@ def main():
           % (100.0*ab_set/tot, 100.0*ab_order/tot))
     print("  production vs ITSELF  :  set %.2f%%   order %.2f%%   <- the control"
           % (100.0*ctl_set/tot, 100.0*ctl_order/tot))
+    print("  by request shape (staging vs production):")
+    for label in [l for l, _ in shapes]:
+        if label in per:
+            n_, o_, s_ = per[label]
+            print("    %-14s n=%-4d order %6.2f%%   set %6.2f%%"
+                  % (label, n_, 100.0*o_/n_, 100.0*s_/n_))
     for k, n, d in examples:
         print("  %-7s %-24s %s" % (k, n, d))
 
