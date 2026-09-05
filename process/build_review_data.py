@@ -228,7 +228,20 @@ def load_places(db, ccode, prof):
             "txt": _trim(r["text"]),
         })
     con.close()
-    return out
+    # Collapse rows that are the same place twice. Two entries can be byte-identical — same headword,
+    # same printed text, same hierarchy, differing only in rowid — because the corpus ingested the
+    # entry twice. The stable id correctly identifies them as one thing, and asking a specialist the
+    # same question twice wastes their time and produces two answers to reconcile.
+    seen, deduped = set(), []
+    for p_ in out:
+        if p_["i"] in seen:
+            continue
+        seen.add(p_["i"])
+        deduped.append(p_)
+    if len(deduped) != len(out):
+        print(f"  collapsed {len(out) - len(deduped)} duplicate entries "
+              f"(identical headword, text and hierarchy)")
+    return deduped
 
 
 def main():

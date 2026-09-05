@@ -11,7 +11,7 @@
   "modern_transliteration": "Standard romanisation, e.g. Kursk",
   "modern_region": "Oblast / krai / republic, e.g. Kursk Oblast"
  },
- "total": 3535,
+ "total": 3534,
  "with_coords": 201,
  "shards": [
   {
@@ -84,7 +84,7 @@
   },
   {
    "file": "russian-017.json",
-   "n": 135
+   "n": 134
   }
  ]
 }

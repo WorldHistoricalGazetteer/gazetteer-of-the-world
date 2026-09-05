@@ -11,7 +11,7 @@
   "chinese_characters": "If known, e.g. 長治縣 / 长治县",
   "modern_province": "e.g. Shanxi"
  },
- "total": 2414,
+ "total": 2413,
  "with_coords": 1166,
  "shards": [
   {
@@ -64,7 +64,7 @@
   },
   {
    "file": "chinese-012.json",
-   "n": 14
+   "n": 13
   }
  ]
 }
