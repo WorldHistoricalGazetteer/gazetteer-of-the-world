@@ -71,7 +71,7 @@ def _cand(src, dist=None):
     """One option as the UI needs it: romanised title, native-script form, id, distance, context."""
     native = ""
     for t in (src.get("toponyms") or [])[:40]:
-        lab = t.get("toponym") or t.get("label") or ""
+        lab = t.get("label") or ""
         if lab and NATIVE.search(lab):
             native = lab
             break
@@ -89,14 +89,18 @@ def _cand(src, dist=None):
 def spatial(es, lat, lon):
     """What the index actually holds near the printed point. No name matching — so the 1856 spelling,
     which is the whole problem, cannot break this query."""
+    # `geometries` is a NESTED field, so a bare geo_distance matches NOTHING — silently, with zero
+    # hits and no error. Verified against the mapping rather than assumed; the first version of this
+    # returned 0 candidates for a point in the middle of Shanxi and looked merely unlucky.
     body = {
         "size": MAX_CANDS * 2,
         "_source": ["place_id", "title", "toponyms", "geometries", "region", "admin_unit", "subregion"],
-        "query": {"bool": {"filter": [
-            {"geo_distance": {"distance": f"{RADIUS_KM}km", "geometries.repr_point": {"lat": lat, "lon": lon}}}
-        ]}},
+        "query": {"nested": {"path": "geometries", "query": {
+            "geo_distance": {"distance": f"{RADIUS_KM}km",
+                             "geometries.repr_point": {"lat": lat, "lon": lon}}}}},
         "sort": [{"_geo_distance": {"geometries.repr_point": {"lat": lat, "lon": lon},
-                                    "order": "asc", "unit": "km"}}],
+                                    "order": "asc", "unit": "km",
+                                    "nested": {"path": "geometries"}}}],
     }
     r = es_post(es, f"/{PLACES_INDEX}/_search", body)
     out = []
@@ -108,7 +112,9 @@ def spatial(es, lat, lon):
 
 def lexical(es, name, variants, ccode):
     """Fallback for rows with no usable coordinate: fuzzy name match inside the country."""
-    should = [{"match": {"toponyms.toponym": {"query": q, "fuzziness": "AUTO"}}}
+    # The nested name field is `toponyms.label`; `toponyms.toponym` does not exist and matched nothing.
+    should = [{"nested": {"path": "toponyms", "query": {
+                  "match": {"toponyms.label": {"query": q, "fuzziness": "AUTO"}}}}}
               for q in ([name] + list(variants))[:4] if q]
     if not should:
         return []
@@ -179,12 +185,31 @@ def main():
     print(f"{args.ccode}: {len(places):,} places; "
           f"{sum(1 for p in places if p['lat'] is not None):,} with a usable coordinate")
 
+    def tidy(cands):
+        """A pick-list is only fast if every option is worth reading.
+
+        Two kinds of noise make it slower than typing: the SAME place listed several times because
+        several gazetteers hold it (Guitou Shi at 3.5km and again at 3.6km), and options whose only
+        label is a bare Wikidata Q-number, which tells a reviewer nothing. Both are dropped — a
+        Q-number is kept only if nothing else in the list carries that native-script name."""
+        out, seen = [], set()
+        for c in cands:
+            title = (c["n"] or "").strip()
+            if re.fullmatch(r"Q\d+", title) and not c["s"]:
+                continue                       # no human-readable label at all
+            key = (title.casefold(), c["s"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(c)
+        return out
+
     def work(p):
         cands = spatial(args.es, p["lat"], p["lon"]) if p["lat"] is not None else []
         if len(cands) < 3:
             seen = {c["id"] for c in cands}
             cands += [c for c in lexical(args.es, p["hw"], p["var"], args.ccode) if c["id"] not in seen]
-        p["c"] = cands[:MAX_CANDS]
+        p["c"] = tidy(cands)[:MAX_CANDS]
         return p
 
     done = 0
