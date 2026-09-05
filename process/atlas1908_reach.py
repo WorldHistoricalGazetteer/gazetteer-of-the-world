@@ -151,7 +151,7 @@ def main():
     bridge = json.loads(Path(a.bridge).read_text(encoding="utf-8"))["bridge"]
     alias = {}
     for j in bridge:                       # 1856 headword -> 1908 postal form
-        alias.setdefault(_norm(j["name"]), j)
+        alias.setdefault(_norm(j["printed_form"]), j)
     samp, coord_bearing, dropped = sample(a.db, a.ccode, a.n, a.seed)
     print(f"cohort A: {len(samp)} of {coord_bearing} usable coordinate-bearing {a.ccode} places "
           f"({dropped} dropped as out-of-bbox), seed {a.seed}")
@@ -161,11 +161,11 @@ def main():
 
     seen, cohort_b = set(), []
     for j in bridge:                       # every bridge place, paired
-        k = _norm(j["name"])
-        if k in seen or j["lat"] is None:
+        k = _norm(j["printed_form"])
+        if k in seen or j["printed_lat"] is None:
             continue
         seen.add(k)
-        cohort_b.append((j["name"], j["lat"], j["lon"], j["atlas_name"]))
+        cohort_b.append((j["printed_form"], j["printed_lat"], j["printed_lon"], j["postal_form"]))
     print(f"cohort B: {len(cohort_b)} distinct places with a verified bridge alias "
           f"({100.0 * len(cohort_b) / max(coord_bearing, 1):.1f}% of the coordinate-bearing corpus "
           f"- this is the ceiling on any corpus-level gain)")
@@ -202,7 +202,7 @@ def main():
     for n, la, lo in samp:
         j = alias.get(_norm(n))
         base = reached(n, la, lo)
-        post = reached(j["atlas_name"], la, lo) if j else base
+        post = reached(j["postal_form"], la, lo) if j else base
         a_sub += post
         a_uni += base or post
     print(f"\ncohort A (n={len(samp)}), the corpus baseline:")

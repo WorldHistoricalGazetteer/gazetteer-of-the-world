@@ -12,6 +12,20 @@ Two page sources:
     native-resolution scans directly.
   • --pdf FILE     OCR a PDF, rendering each page at --dpi (handy for spot checks).
 
+⚠️ DO NOT UPSCALE THE PAGE IMAGES. Measured 2026-09-06 on the densest text we have OCR'd, the
+4-column index of the 1908 Atlas of the Chinese Empire (~1,800 px page width, ~6 pt type), Surya at
+native resolution against the same pages upscaled 2x with Lanczos:
+
+    native  6,517 index entries recovered, 0.84% alphabetical inversions
+    2x      4,625 index entries recovered, 6.1%  alphabetical inversions
+
+Upscaling made it WORSE, and not marginally. The failure is not recognition but detection: at 2x,
+Surya merged line boxes ACROSS the vertical column rules far more often, so rows from adjacent
+columns were welded together and had to be cut apart or dropped. More pixels per glyph did not buy
+better reading of small type; it bought a layout the detector handled worse. The intuition that
+small type wants more resolution is the wrong intuition here, and it costs a GPU run to rediscover.
+Feed Surya the native-resolution scans (which is what --img-dir already does).
+
 Per page:
   • LayoutPredictor finds non-text regions (Table, Picture/Figure). Surya treats the
     dense two-column body as ONE 'Text' region, so it does NOT split the columns for us —

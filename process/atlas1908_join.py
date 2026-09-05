@@ -47,6 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from atlas1908_index import _norm  # noqa: E402  - one join key, defined once
+from review_store import sig  # noqa: E402  - the repo's stable entry signature
 
 GATE_KM = 25.0            # the same radius probe_reachability.py calls "the right vicinity"
 SWEEP = (5, 10, 25, 50, 100, 250, 500)
@@ -67,12 +68,19 @@ def our_places(db, ccode="CN"):
 
     `place.extraction` is the extraction blob and is never written by reconciliation, so this
     selection is stable across a re-reconciliation running at the same time.
+
+    Each row also carries the repo's stable signature, `sig(filename, headword_raw, page_start)` plus
+    the place's ordinal, matching `review_ui` and `build_eval_set` exactly. `place_id` is emitted too
+    but the signature is the one a consumer should key on: place ids do not survive a re-parse or a
+    DB rebuild, and this table is meant to be loaded by a later selective re-reconciliation.
     """
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     lo0, lo1, la0, la1 = CN_BBOX
     out = []
-    for pid, name, ext in con.execute(
-            "SELECT place_id, name, extraction FROM place WHERE extraction IS NOT NULL"):
+    for pid, name, ext, ordinal, hw_raw, page_start, filename in con.execute(
+            "SELECT p.place_id, p.name, p.extraction, p.ordinal, e.headword_raw, e.page_start, "
+            "s.filename FROM place p JOIN entry e ON e.entry_id = p.entry_id "
+            "JOIN source s ON s.source_id = e.source_id WHERE p.extraction IS NOT NULL"):
         try:
             e = json.loads(ext)
         except (ValueError, TypeError):
@@ -84,10 +92,24 @@ def our_places(db, ccode="CN"):
             lat = lon = None          # a lone latitude is not a location
         elif not (lo0 <= lon <= lo1 and la0 <= lat <= la1):
             lat = lon = None          # corrupt printed coordinate: unusable as ground truth
-        out.append({"place_id": pid, "name": name, "lat": lat, "lon": lon,
+        out.append({"place_id": pid, "sig": sig(filename, hw_raw, page_start) + f":{ordinal}",
+                    "name": name, "lat": lat, "lon": lon,
                     "hierarchy": [a for a in (e.get("admin_hierarchy") or [])]})
     con.close()
     return out
+
+
+def _row(p, atlas, d, status, n_cands):
+    """One alias-table row. `km` is kept per row rather than only the pass/fail verdict so a consumer
+    can re-threshold without re-deriving the join - the gate at 25 km is this script's choice, not a
+    property of the data."""
+    return {"sig": p["sig"], "place_id": p["place_id"],
+            "printed_form": p["name"], "postal_form": atlas["name"],
+            "status": status, "verified": status == "verified",
+            "km": None if d is None else round(d, 1),
+            "printed_lat": p["lat"], "printed_lon": p["lon"],
+            "atlas_lat": atlas["lat"], "atlas_lon": atlas["lon"],
+            "atlas_province": atlas["province"], "atlas_candidates": n_cands}
 
 
 def build(places, entries, gate_km=GATE_KM):
@@ -106,6 +128,7 @@ def build(places, entries, gate_km=GATE_KM):
         stats["name_matched"] += 1
         if p["lat"] is None:
             stats["name_matched_uncheckable"] += 1     # no printed coordinate: cannot be verified
+            joins.append(_row(p, cands[0], None, "unverifiable_no_coordinate", len(cands)))
             continue
         stats["name_matched_checkable"] += 1
         scored = sorted(((km(p["lat"], p["lon"], c["lat"], c["lon"]), c) for c in cands
@@ -113,22 +136,15 @@ def build(places, entries, gate_km=GATE_KM):
                         key=lambda t: t[0])
         if not scored:
             stats["name_matched_uncheckable"] += 1
+            joins.append(_row(p, cands[0], None, "unverifiable_no_coordinate", len(cands)))
             continue
         d, best = scored[0]
         if d > gate_km:
             stats["rejected_by_coordinate"] += 1
-            joins.append({**{k: p[k] for k in ("place_id", "name", "lat", "lon")},
-                          "verified": False, "km": round(d, 1),
-                          "atlas_name": best["name"], "atlas_province": best["province"],
-                          "atlas_lat": best["lat"], "atlas_lon": best["lon"],
-                          "atlas_candidates": len(cands)})
+            joins.append(_row(p, best, d, "rejected_by_coordinate", len(cands)))
             continue
         stats["verified"] += 1
-        joins.append({**{k: p[k] for k in ("place_id", "name", "lat", "lon")},
-                      "verified": True, "km": round(d, 1),
-                      "atlas_name": best["name"], "atlas_province": best["province"],
-                      "atlas_lat": best["lat"], "atlas_lon": best["lon"],
-                      "atlas_candidates": len(cands)})
+        joins.append(_row(p, best, d, "verified", len(cands)))
     return joins, stats
 
 
@@ -162,7 +178,7 @@ def main():
           f"   ({100.0 * st['verified'] / max(ck, 1):.1f}% of checkable pass)")
     print(f"  name-matched but no printed coordinate to check: {st['name_matched_uncheckable']}")
 
-    ds = sorted(j["km"] for j in joins)
+    ds = sorted(j["km"] for j in joins if j["km"] is not None)
     print("\ndistance sweep (cumulative share of the %d checkable name matches):" % ck)
     for r in SWEEP:
         n = sum(1 for d in ds if d <= r)
@@ -195,10 +211,23 @@ def main():
 
     if a.out:
         ver = [j for j in joins if j["verified"]]
-        Path(a.out).write_text(json.dumps(
-            {"source": {"index": a.index, "gate_km": GATE_KM, "ccode": a.ccode},
-             "stats": dict(st), "bridge": ver}, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"\nwrote {len(ver)} verified bridge rows -> {a.out}")
+        Path(a.out).write_text(json.dumps({
+            "source": {"index": a.index, "gate_km": GATE_KM, "ccode": a.ccode,
+                       "key": "sig = review_store.sig(filename, headword_raw, page_start) + ':' + "
+                              "ordinal; place_id is included but does not survive a re-parse",
+                       "usage": "aliases are ADDITIONAL query variants, never replacements for the "
+                                "printed form: substituting gains 24 places and loses 15 (n=88), "
+                                "because the postal form retrieves different documents rather than "
+                                "the same ones better. See process/atlas1908_reach.py.",
+                       "false_positives": "the within-province null verifies 1.8% of checkable name "
+                                          "matches, so ~3 of the verified rows are expected to be "
+                                          "chance. WHICH three is not identifiable per-row; the "
+                                          "estimate is aggregate. Tighten with `km` if that matters "
+                                          "- 12 of the 90 are within 5 km and 30 within 10 km."},
+            "stats": dict(st), "bridge": ver, "rejected": [j for j in joins if not j["verified"]]},
+            ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"\nwrote {len(ver)} verified + {len(joins) - len(ver)} rejected/unverifiable rows "
+              f"-> {a.out}")
 
 
 if __name__ == "__main__":
