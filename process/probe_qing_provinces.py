@@ -78,3 +78,31 @@ for printed, modern in MAP:
         "" if hit else "   <-- NOT %s" % modern))
 print("\nusable containers as printed: %d/%d   (of which resolving to the WRONG province: %d)"
       % (ok, len(MAP), wrong))
+
+# ── assert, do not merely report ─────────────────────────────────────────────
+# A script that prints a number and exits 0 cannot fail: if a future change quietly made this 9/18,
+# it would still look like a pass and someone would have to read the output to notice. This result is
+# cited externally as evidence, so it has to break loudly when it moves — in EITHER direction, because
+# an improvement is as much a reason to revisit the conclusion drawn from it as a regression is.
+EXPECT_USABLE, EXPECT_WRONG = 11, 1
+EXPECT_KEANG_SU = "wd:Q42392"          # Gansu — the wrong province, and the headline example
+
+problems = []
+if ok != EXPECT_USABLE:
+    problems.append("usable containers %d, expected %d" % (ok, EXPECT_USABLE))
+if wrong != EXPECT_WRONG:
+    problems.append("wrong-province resolutions %d, expected %d" % (wrong, EXPECT_WRONG))
+ks, _, _ = resolve("Keang-su")
+ks_id = ks["place_id"] if ks else None
+if ks_id != EXPECT_KEANG_SU:
+    problems.append("Keang-su resolved to %s, expected %s" % (ks_id, EXPECT_KEANG_SU))
+
+if problems:
+    print("\nBASELINE MOVED — this needs a human, not a re-baseline:")
+    for p_ in problems:
+        print("  * " + p_)
+    print("\n  This measurement is cited in the indexing repo's developer/plan-symphonym-v8.md as the")
+    print("  independent evidence that Symphonym's historic-romanisation weakness is real. If it has")
+    print("  genuinely changed, say so THERE before editing the constants here.")
+    raise SystemExit(1)
+print("\nbaseline holds: %d/%d usable, %d wrong, Keang-su -> %s" % (ok, len(MAP), wrong, ks_id))
