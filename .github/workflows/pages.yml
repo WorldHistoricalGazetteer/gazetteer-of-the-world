@@ -29,7 +29,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Pull large assets from the 'site-assets' release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,9 +43,9 @@ jobs:
           cp /tmp/assets/symphonym.int8.onnx /tmp/assets/symphonym-embeddings.i8 \
              /tmp/assets/symphonym-meta.json /tmp/assets/symphonym-manifest.json docs/search/
           echo "assets in place:"; du -sh docs/reader docs/search/gotw-fts.sqlite.png docs/search/symphonym-embeddings.i8
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
