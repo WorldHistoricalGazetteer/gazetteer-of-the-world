@@ -182,3 +182,105 @@ The global additions sit alongside the original South Asia candidates under the
 same schema. To separate them, filter the *Tags* column for `global comparator`,
 or the *Region covered* / *Current country/area* columns by South Asia vs. wider
 regions.
+
+---
+
+# Reading this list a second way: romanisation bridges
+
+*Added 2026-09-06 after the 1908 China atlas experiment (place#245). The list above selects sources
+for INGESTION into WHG. This section re-reads the same material against a different and much
+narrower question, because the two rubrics disagree about what makes a source valuable.*
+
+## Why the rubrics differ
+
+A bridge source is never ingested. It is consulted once, and the only thing retained is a table of
+`(our printed form, historical form, coordinate, verified?)`. See `LICENSING-POLICY.md`: consulting
+retains nothing, and a table of name pairs we derived ourselves is our own work. So "WHG gap value"
+and "data richness", which dominate the rubric above, barely matter here. Three properties do:
+
+1. **A romanisation convention BETWEEN ours and the modern one.** Our corpus is 1856. A source using
+   essentially modern spelling teaches nothing; a source using our own spelling teaches nothing
+   either. The 1908 China atlas worked because postal romanisation sits between the two: mean string
+   similarity to our 1856 forms was 0.786, against 0.571 for pinyin.
+2. **COORDINATES IN THE SOURCE.** This is the binding constraint and the one most easily overlooked.
+   Without a coordinate the join is a name-similarity guess, and we measured what that is worth:
+   **45.8% of coordinate-checkable name matches were WRONG**. A bridge without verification does not
+   reduce error, it launders it.
+3. **Our own OCR must be feasible.** Page images, tolerable layout, no third-party transcript
+   (`CLAUDE.md` forbids ingesting one). Reference OCR may be used to assess a source, never to build
+   from.
+
+## Where the need actually is, measured
+
+Place counts from `data/gotw_seg.sqlite`, reachability from `process/probe_reachability.py`
+(n=100 per country, any candidate within 25 km of the printed coordinate):
+
+| Region | Places | With printed coords | Reachability |
+|---|---|---|---|
+| Middle East / SW Asia | 4,564 | 613 (13%) | not measured |
+| Russia | 3,535 | 213 (6%) | **25.0%** |
+| Africa | 3,516 | 702 (20%) | not measured |
+| India | 3,210 | 351 (11%) | 50.0% |
+| China | 2,414 | **1,208 (50%)** | **18.0%** |
+| *Great Britain (control)* | *18,112* | *199* | *76.0%* |
+
+**China was the easiest case, not the hardest.** Half its places carry a printed coordinate, which
+is why the bridge could be verified at all. Everywhere else the verifiable fraction is 6-20%, so the
+same method yields a much smaller checkable set and a much larger unverifiable residue. Since the
+unverifiable residue carries a measured ~46% error rate, that residue cannot simply be adopted.
+
+Priority is therefore *not* simply "biggest region". It is where a bridge is both needed and
+checkable. On that basis: **Africa (20% checkable) and the Middle East rank above Russia (6%)**,
+despite Russia having the worse measured reachability, and India ranks below both because 50%
+reachability means the convention gap is already half closed.
+
+## The candidates above, re-scored as bridges
+
+- **Imperial Gazetteer of India (1908-09, 26 vols)** and **Hunter's 1885-87 edition**: the strongest
+  bridge candidate in the list, and better shaped than the China atlas. Entries carry coordinates in
+  the text, both as district ranges ("lying between 18° 15' and 20° N., 83° 49' and 85° 15' E.") and
+  as town points, so it supplies containment extents *and* verification points. Hunter's 1885
+  edition is the more interesting of the two: it is 29 years from our corpus rather than 52, and
+  Hunter designed the Hunterian romanisation, so it is the first systematic application of the
+  convention that persists into modern Indian spelling. **Caveat: India's reachability is already
+  50%, so the headroom is smaller than China's was.**
+- **Lorimer, *Gazetteer of the Persian Gulf* (1908-15)**: rich and coordinate-bearing, but covers the
+  Gulf littoral only. Our Middle East exposure is dominated by **Turkey (2,078)** and **Iran (767)**,
+  which Lorimer barely touches. Good source, wrong shape for this purpose.
+- **Ottoman *salname* / *Kamus al-A'lam***: the right coverage for Turkey, but in Ottoman Turkish
+  script. That is a second transliteration problem stacked on the first, and the note above is right
+  that it needs specialist capability. Not a near-term bridge.
+- **Africa entries (Hall 1866, Hall 1909, East Africa search leads)**: none is a general gazetteer
+  with coordinates. Africa's 702 coordinate-bearing places are the second-best verification base we
+  have and there is currently **no identified source to bridge them**. This is the clearest gap in
+  the list.
+- **Russia**: nothing in the list, and the obvious candidate does not serve. *Spiski Naselennykh Mest
+  Rossiiskoi Imperii* (62 vols, 1860s) is contemporary with our corpus but is printed in **Cyrillic**,
+  so it supplies no romanisation at all. A bridge for Russia needs a source that romanised Russian
+  toponyms with coordinates, which points at the twentieth century rather than the nineteenth.
+
+## One source worth adding, with a caveat that may kill it
+
+**US Board on Geographic Names country gazetteer series (1955 onward, ~100+ countries).** US
+government works, so public domain; each volume gives approved name, **variant names not approved**,
+and coordinates. That is exactly the shape needed, for Africa, the Middle East, the USSR and South
+Asia at once, and it is the only single source that covers all of our gap regions.
+
+⚠ **Test before investing anything.** The BGN series' digital descendant (NGA GNS) feeds GeoNames,
+which is already in WHG's index. If the printed variants survived digitisation, they are already
+indexed and there is nothing to gain. The China work showed this is not a safe assumption in either
+direction: postal forms for the head were already indexed (15 of 15 treaty ports resolved), while the
+county-level tail was not. **So the first move is a measurement, not an OCR job:** sample 200 of our
+unreachable names per region, query the index for period variants, and establish what fraction is
+already present. That costs an hour and can rule the whole line of work in or out.
+
+## The order I would do these in
+
+1. **Measure BGN/GNS variant coverage** for Africa, the Middle East and Russia (an hour, decides
+   everything downstream).
+2. **Hunter 1885 for India**, if step 1 shows thin coverage. Best-shaped source, known format,
+   coordinates in the text, and the pipeline for it already exists in `process/atlas1908_index.py`.
+3. **Find an Africa source at all.** Currently unidentified, and Africa has the second-best
+   verification base. This is a search problem, not an OCR problem.
+4. **Russia last**, despite the poor reachability: 6% checkable means we could not prove a bridge
+   worked even if we built one.
