@@ -45,3 +45,6 @@ docs/geometry.pmtiles
 
 # Reconciliation probe output (regenerate with process/probe_reconcile.py)
 data/probe/
+
+# Written at deploy time from a repository secret; never committed (see .github/workflows/pages.yml)
+docs/keys.js

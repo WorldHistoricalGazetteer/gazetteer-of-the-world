@@ -327,7 +327,7 @@ $('export').onclick = () => {
       // `id` is the authoritative key: stable across a re-parse and across the round trip to a
       // specialist and back. `place_id` is our current rowid and is NOT stable — it is carried only
       // so we can join back to the working DB today, and must never be used as the join key.
-      const o = { id: r.i, place_id: r.pid, headword: r.hw, printed_hierarchy: r.hier,
+      const o = { id: r.i, pack_rank: r.r, place_id: r.pid, headword: r.hw, printed_hierarchy: r.hier,
                   printed_variants: r.var, printed_lat: r.lat, printed_lon: r.lon,
                   volume: r.vol, page: r.pg, coordinate_flags: r.flags || [],
                   answered: false, skipped: !!a.skipped,

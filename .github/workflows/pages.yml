@@ -43,6 +43,38 @@ jobs:
           cp /tmp/assets/symphonym.int8.onnx /tmp/assets/symphonym-embeddings.i8 \
              /tmp/assets/symphonym-meta.json /tmp/assets/symphonym-manifest.json docs/search/
           echo "assets in place:"; du -sh docs/reader docs/search/gotw-fts.sqlite.png docs/search/symphonym-embeddings.i8
+      # Refuse to deploy a credential that has been committed. This runs BEFORE the step that
+      # writes one, so it can never trip over its own output. A key in git is a key that has to be
+      # rotated; a key written at deploy time is not in git at all.
+      - name: Refuse to publish a committed credential
+        run: |
+          if [ -f docs/keys.js ]; then
+            echo "::error::docs/keys.js is committed. It must be written at deploy time from a"
+            echo "::error::repository secret and gitignored. Remove it and rotate the key."
+            exit 1
+          fi
+      # CARTO now returns HTTP 200 with "API KEY REQUIRED" written across unkeyed tiles — a failure
+      # that reports success — so the map must either be keyed or use a different provider. The key
+      # is NOT a secret in the usual sense: it is visible to anyone who opens the page. What protects
+      # it is CARTO's Allowed HTTP Origins restriction, which limits it to this Pages domain and
+      # returns 403 anywhere else. Absent is the normal case for a fork or a local preview, and the
+      # page falls back to OpenStreetMap rather than drawing watermarked tiles.
+      - name: Write docs/keys.js from repository secrets
+        env:
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY }}
+        run: |
+          if [ -z "$CARTO_API_KEY" ]; then
+            echo "::warning::CARTO_API_KEY is not set, so the map falls back to OpenStreetMap."
+            echo "::warning::That is a supported path, not a failure."
+            exit 0
+          fi
+          # A .js file rather than .json, deliberately: it loads with an ordinary <script> tag and is
+          # therefore available SYNCHRONOUSLY, before the map is built. Fetching JSON would need a
+          # top-level await the page cannot use (the main script is not a module) or a restructuring
+          # of 55 top-level statements. When the file is absent the tag 404s harmlessly and
+          # window.WHG_KEYS is simply undefined, which is the fallback path.
+          printf 'window.WHG_KEYS={"carto":"%s"};\n' "$CARTO_API_KEY" > docs/keys.js
+          echo "docs/keys.js written (carto)"
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

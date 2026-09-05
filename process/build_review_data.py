@@ -258,6 +258,13 @@ def main():
 
     prof = PROFILES[args.ccode]
     places = order_for_review(load_places(args.db, args.ccode, prof), prof)
+    # Explicit 1-based rank in the pack as generated. It describes THIS pack, not the underlying
+    # entry, so it deliberately does not survive a re-parse — a reordered pack is a new pack.
+    # Emitted as a field rather than left implicit in array order, because array order is true until
+    # it quietly is not: a UI, a download and a specialist's browser sit between generation and
+    # return, and none of them announces a reordering.
+    for n, p_ in enumerate(places, 1):
+        p_["r"] = n
     if args.limit:
         places = places[: args.limit]
     print(f"{args.ccode}: {len(places):,} places; "

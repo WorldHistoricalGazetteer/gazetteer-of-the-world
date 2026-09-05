@@ -6,6 +6,7 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <title>Gazetteer of the World — extracted places</title>
   <link href="./lib/maplibre-gl.css" rel="stylesheet" />
+  <script src="./keys.js" onerror="/* absent in forks and local previews — see pages.yml */"></script>
   <script src="./lib/maplibre-gl.js"></script>
   <script src="./lib/pmtiles.js"></script>
   <script src="./search/lib/index.js"></script>   <!-- sql.js-httpvfs (UMD -> window.createDbWorker) -->
@@ -284,15 +285,32 @@
   const COLORS = { P:"#c26b4a", A:"#4a6fa5", H:"#2e8b8b", T:"#8a6d3b", S:"#7a4a6b", X:"#777" };
   const LABELS = { P:"Populated place", A:"Administrative", H:"Water body", T:"Landform", S:"Structure", X:"People" };
 
-  // Light editorial basemap (CARTO Positron raster + OSM data).
+  // Light editorial basemap. CARTO Positron when a key is available, OpenStreetMap otherwise.
+  //
+  // CARTO now requires a key and serves UNKEYED tiles at HTTP 200 with "API KEY REQUIRED" written
+  // across the image — a failure that reports success, and one this map shipped with until it was
+  // noticed by fetching a tile and looking at it. So there is no unkeyed CARTO path: either the key
+  // is present or we use a different provider.
+  //
+  // keys.js is written at deploy time from a repository secret and is gitignored, so it is absent in
+  // a fork and in any local preview. That is the NORMAL case, not an error, and the tag 404s
+  // harmlessly leaving window.WHG_KEYS undefined. It is a .js rather than .json so that the key is
+  // available SYNCHRONOUSLY — the attribution has to name whichever provider actually serves the
+  // tiles, from the first paint, and this script is not a module so it cannot await.
+  // The key is not secret in any useful sense (anyone can read it from the page); what protects it
+  // is CARTO's Allowed HTTP Origins restriction to this Pages domain.
+  const keys = window.WHG_KEYS || {};
+  const basemap = keys.carto ? {
+    tiles: ["a", "b"].map(h =>
+      `https://${h}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?api_key=${encodeURIComponent(keys.carto)}`),
+    attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  } : {
+    tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+    attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  };
   const style = {
     version: 8,
-    sources: { carto: {
-      type: "raster", tileSize: 256,
-      tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
-      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    }},
+    sources: { carto: { type: "raster", tileSize: 256, ...basemap } },
     layers: [{ id: "carto", type: "raster", source: "carto" }]
   };
   const map = new maplibregl.Map({ container: "map", style, center: [10, 35], zoom: 1.6 });
