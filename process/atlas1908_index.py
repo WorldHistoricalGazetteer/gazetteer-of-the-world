@@ -84,6 +84,13 @@ COORD_RE = re.compile(_PAIR + r"\s*$")
 COORD_ANY_RE = re.compile(_PAIR)        # unanchored: used to cut a line that merged across the rule
 NAME_CLEAN_RE = re.compile(r"\s*\.(\s*\.)*\s*$")
 RULE_RE = re.compile(r"^[|Il!\[\]]\s+")     # a column rule Surya read as a character
+WRAP_HYPHEN_RE = re.compile(r"(?<=[A-Za-z])- (?=[a-z])")   # `Mon- golia`: a line-break hyphen, joined
+# Residue of a row the coordinate cut could not reach: Surya renders some coordinate runs as LaTeX
+# (`<math>75.49</math>`) or substitutes glyphs (`20.42 x 107.10`, `86.50 B`), none of which the
+# coordinate pattern matches, so those rows silently weld two entries together. 1.4% of rows. They are
+# harmless in an aggregate measurement and NOT harmless in training data, where a wrong pair costs
+# more than a missing one, so they are flagged per row rather than dropped.
+SUSPECT_RE = re.compile(r"<math|\\begin|\d|\s[NnSsEeWw]\s|[|]")
 
 # Every coordinate in this atlas is north and east, so the plausible window is a hard gate rather than
 # a heuristic. It earns its place: the column rule is intermittently read as a `1`, which turns
@@ -327,7 +334,8 @@ def _parse_row(text, entries, carry, page, col, stats):
     else:
         head, prov = full, ""
     entries.append({
-        "name": head.strip(" ."), "province": prov.strip(" ."),
+        "name": WRAP_HYPHEN_RE.sub("", head).strip(" ."),
+        "province": WRAP_HYPHEN_RE.sub("", prov).strip(" ."),
         "lat": round(lat, 4), "lon": round(lon, 4),
         "is_range": bool(lat_rng or lon_rng),
         "page": page, "col": col, "raw": text,
@@ -402,6 +410,33 @@ CHINA_PROPER = {_norm(p) for p in (
     "Kweichow Shansi Shantung Shensi Szechwan Yunnan").split()}
 
 
+def add_flags(entries):
+    """Per-row quality flags, so a consumer can filter without re-deriving anything.
+
+    The aggregate QA below says what fraction of the reconstruction is sound; this says WHICH rows.
+    The distinction matters because the two most likely uses have opposite error preferences: a
+    measurement wants every row and tolerates a known noise rate, while training data wants only rows
+    it can trust and would rather lose 5% than learn a fabricated pair.
+    """
+    boxes = province_boxes(entries)
+    for e in entries:
+        f = []
+        if e["is_range"]:
+            f.append("province_box")            # a bounding box, not a place
+        if SUSPECT_RE.search(e["name"]) or len(e["name"]) > 38:
+            f.append("suspect_name")            # a row the coordinate cut could not separate
+        b = boxes.get(_norm(e["province"]))
+        if b:
+            lo0, lo1, la0, la1 = b
+            if not (lo0 <= e["lon"] <= lo1 and la0 <= e["lat"] <= la1):
+                f.append("outside_province_box")
+        elif e["province"]:
+            f.append("no_province_box")
+        e["flags"] = f
+        e["clean"] = not f or f == ["no_province_box"]
+    return entries
+
+
 def qa(entries):
     boxes = province_boxes(entries)
     inside = outside = untested = 0
@@ -456,8 +491,11 @@ def main():
         diag.update(page=idx, entries=len(got))
         pages.append(diag)
 
+    entries = add_flags(entries)
     q = qa(entries)
     q["rejected_implausible"] = stats["implausible"]
+    q["clean_rows"] = sum(1 for e in entries if e["clean"])
+    q["suspect_name"] = sum(1 for e in entries if "suspect_name" in e["flags"])
     print(f"pages {len(files)}  entries {len(entries)}  "
           f"(range-form/province rows {sum(e['is_range'] for e in entries)})")
     for p in pages:
@@ -465,7 +503,10 @@ def main():
         print(f"  p{p['page']:05d}: lines {p['lines']:4d}  entries {p['entries']:4d}  "
               f"split v/h {p['merged_vertical']:3d}/{p['merged_horizontal']:3d}  "
               f"dropped-crossing {p['uncuttable_crossings']:2d}{flag}")
-    print(f"\nQA  rows rejected as implausible coordinates:   {q['rejected_implausible']}")
+    print(f"\nQA  rows carrying no quality flag (usable as-is): {q['clean_rows']}/{len(entries)}"
+          f"  ({100.0 * q['clean_rows'] / max(len(entries), 1):.1f}%)")
+    print(f"    rows flagged `suspect_name` (a weld the cut missed): {q['suspect_name']}")
+    print(f"    rows rejected as implausible coordinates:   {q['rejected_implausible']}")
     print(f"    province boxes recovered from the index itself: {q['province_boxes']}")
     tot = q["in_box"] + q["out_of_box"]
     print(f"    inside its stated province box, China proper: {q['in_box']}/{tot}"
