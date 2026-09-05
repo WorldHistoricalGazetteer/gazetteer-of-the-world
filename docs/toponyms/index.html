@@ -317,6 +317,16 @@ $('export').onclick = () => {
                   volume: r.vol, page: r.pg, coordinate_flags: r.flags || [],
                   answered: false, skipped: !!a.skipped,
                   chosen_whg_id: a.whg_id || null,
+                  // The NAME of the option that was picked, so a consumer can tell whether the
+                  // specialist subsequently overrode it. Picking "Changzhi" and then typing
+                  // "Changzhou" leaves chosen_whg_id anchored to a place they rejected — and an id
+                  // that resolves cleanly while naming the wrong place is exactly the failure a
+                  // resolvable anchor was supposed to prevent. Compare, do not assume.
+                  chosen_whg_name: (a.pick != null && r.c && r.c[a.pick]) ? r.c[a.pick].n : null,
+                  // true when the typed romanisation differs from the picked option's name.
+                  overridden: (a.pick != null && r.c && r.c[a.pick] &&
+                               a[MAN.fields[0]] &&
+                               a[MAN.fields[0]].trim().toLowerCase() !== r.c[a.pick].n.trim().toLowerCase()),
                   confident: a.confident || (a.pick != null ? 'y' : null) };
       MAN.fields.forEach(k => o[k] = a[k] || '');
       o.answered = !!(a.pick != null || a.skipped || MAN.fields.some(k => a[k]));
