@@ -37,6 +37,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -49,6 +50,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_specialist_pack import PROFILES, PAREN, km  # noqa: E402  — one definition of the profiles
 from review_store import sig  # noqa: E402  — stable across re-parses, unlike a rowid
+
+
+def stable_id(filename, headword_raw, page_start, text, ordinal):
+    """A key that survives a re-parse AND is actually unique.
+
+    `review_store.sig(volume, headword, page)` alone is not: the book prints the same headword twice
+    on one page often enough to matter — two different CHANG-CHU-FU, one in Kyang-su and one in
+    Fokyen; ARCHANGEL the city and ARCHANGEL the government. Measured on this corpus, 13 Chinese and
+    34 Russian ids collided, 94 rows in total. A join key that is right 98% of the time silently
+    merges two places, which is worse than an unstable key because nothing complains.
+
+    Adding a short digest of the ENTRY TEXT separates them, and stays stable for the same reason the
+    signature does: it changes only if the OCR is redone, in which case every id changes anyway."""
+    h = hashlib.sha1((text or "").encode("utf-8", "replace")).hexdigest()[:6]
+    return f"{sig(filename, headword_raw, page_start)}{h}:{ordinal}"
 
 RADIUS_KM = 30.0
 MAX_CANDS = 10
@@ -196,7 +212,7 @@ def load_places(db, ccode, prof):
             # same row for the indexing side's train/test split. Same signature the human-review
             # sidecar uses: sig(filename, headword_raw, page_start) plus the place's ordinal within
             # its entry, because one entry can yield several places.
-            "i": sig(r["filename"], r["headword_raw"], r["page_start"]) + f":{r['ordinal']}",
+            "i": stable_id(r["filename"], r["headword_raw"], r["page_start"], r["text"], r["ordinal"]),
             "pid": r["place_id"],
             "hw": r["name"],
             "var": [v for v in (ext.get("variant_names") or []) if v][:4],
