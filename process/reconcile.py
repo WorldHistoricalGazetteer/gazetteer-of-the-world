@@ -143,6 +143,42 @@ def ensure_columns(con):
     for col, typ in (("reconciliation", "TEXT"), ("whg_score", "REAL"), ("recon_pass", "TEXT")):
         if col not in cols:
             con.execute(f"ALTER TABLE place ADD COLUMN {col} {typ}")
+    # Resolved admin parents, persisted so a re-run does not repeat them. A full-corpus run makes
+    # ~41.5k distinct parent lookups against a remote service; in memory only, any interruption threw
+    # all of them away and the resume paid for them again. Same rationale as `llm_cache`, and keyed the
+    # same way — by what determines the answer, so an alias-table edit invalidates only what it should.
+    con.execute("CREATE TABLE IF NOT EXISTS parent_cache ("
+                "key TEXT PRIMARY KEY, value TEXT, created_at TEXT)")
+    con.commit()
+
+
+def _pc_key(name, cc, container_ids):
+    return json.dumps([_norm(name), cc or "", sorted(container_ids or [])], ensure_ascii=False)
+
+
+def load_parent_cache(con):
+    """Warm `_PARENT_CACHE` from the DB. Returns how many entries were restored."""
+    try:
+        rows = con.execute("SELECT key, value FROM parent_cache").fetchall()
+    except sqlite3.OperationalError:
+        return 0
+    for k, v in rows:
+        try:
+            key = tuple(json.loads(k))
+            _PARENT_CACHE[(key[0], key[1] or None, tuple(key[2]) or None)] = json.loads(v) if v else None
+        except (ValueError, IndexError, TypeError):
+            continue
+    return len(rows)
+
+
+def save_parent_cache(con, keys):
+    """Persist the given cache keys. Called after each depth, so an interrupted run keeps its work."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for key in keys:
+        norm, cc, cont = key
+        con.execute("INSERT OR REPLACE INTO parent_cache(key, value, created_at) VALUES(?,?,?)",
+                    (json.dumps([norm, cc or "", sorted(cont or [])], ensure_ascii=False),
+                     json.dumps(_PARENT_CACHE.get(key), ensure_ascii=False), now))
     con.commit()
 
 
@@ -464,24 +500,79 @@ def _resolve_one(name, cc, container_ids, threshold):
     return res
 
 
-def resolve_hierarchy(rows, threshold):
-    """Per place: resolve its admin_hierarchy (broadest→narrowest) to geometry-bearing parent ids, each
+def _place_chain(row):
+    """(cc, [(printed, queried) …]) for one row — its admin hierarchy, broadest first, de-duplicated."""
+    ext = json.loads(row["extraction"]) if row["extraction"] else {}
+    cc = ext.get("country_code")
+    chain, seen = [], set()
+    for printed in (ext.get("admin_hierarchy") or []):
+        name = _clean_admin(printed, cc)
+        if name and _norm(name) not in seen:
+            chain.append((printed, name)); seen.add(_norm(name))
+    return cc, chain
+
+
+def resolve_hierarchy(rows, threshold, concurrency=12, con=None):
+    """Per place: resolve its admin_hierarchy (broadest→narrowest) to AREAL parent ids, each
     contained_in the previous. Returns (parents {pid: [ids broadest-first]}, relations {pid: [LPF rels]}).
-    Sequential, but the cache collapses shared ancestors (every 'Essex' resolved once)."""
-    parents_by_pid, relations = {}, {}
+
+    Resolved **by depth, in parallel within each depth**. A chain must be walked top-down for one place
+    — level d is queried `contained_in` whatever level d-1 resolved to, which is the whole point — but
+    across places the level-d lookups are independent once level d-1 is known. The old implementation
+    walked places one at a time and so ran the entire stage single-threaded: at 300 places that was a
+    fair trade against cache reuse, at 108,758 places (41,549 distinct cache keys) it is ~12.6 hours of
+    a ~20-hour run, on a workload whose limiter is a remote service, not us.
+
+    Cache reuse is not lost, it improves: every distinct key at a depth is resolved exactly once for the
+    whole corpus, because the depth's key set is computed before any request goes out. The number of
+    requests is identical to the sequential version; only the wall-clock changes."""
+    chains = {}                       # pid -> (cc, [(printed, queried) …])
     for r in rows:
-        ext = json.loads(r["extraction"]) if r["extraction"] else {}
-        cc = ext.get("country_code")
-        chain, seen = [], set()
-        for printed in (ext.get("admin_hierarchy") or []):
-            name = _clean_admin(printed, cc)
-            if name and _norm(name) not in seen:
-                chain.append((printed, name)); seen.add(_norm(name))
-        ids, rels, container = [], [], []
-        for printed, name in chain:
-            par = _resolve_one(name, cc, container, threshold)
-            if not par:
+        cc, chain = _place_chain(r)
+        if chain:
+            chains[r["place_id"]] = (cc, chain)
+
+    resolved = {}                     # pid -> [parent dicts, broadest first]
+    container_of = {pid: [] for pid in chains}   # pid -> current container ids ([] = none yet)
+    max_depth = max((len(c) for _, c in chains.values()), default=0)
+
+    for depth in range(max_depth):
+        # Distinct (name, cc, container) keys needed at this depth, deduplicated before any request.
+        wanted, by_key = {}, {}
+        for pid, (cc, chain) in chains.items():
+            if depth >= len(chain):
                 continue
+            name = chain[depth][1]
+            cont = tuple(container_of[pid])
+            key = (_norm(name), cc, cont or None)
+            if key not in _PARENT_CACHE:
+                wanted[key] = (name, cc, list(cont))
+            by_key.setdefault(key, []).append(pid)
+        if wanted:
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futs = {pool.submit(_resolve_one, n, cc, cont, threshold): k
+                        for k, (n, cc, cont) in wanted.items()}
+                for fut in as_completed(futs):
+                    fut.result()      # _resolve_one populates _PARENT_CACHE itself
+        if con is not None and wanted:
+            save_parent_cache(con, wanted.keys())   # checkpoint the depth before moving down
+        # Assign, and set each place's container for the next depth down.
+        for key, pids in by_key.items():
+            par = _PARENT_CACHE.get(key)
+            if not par:
+                continue              # level unresolved: skip it, keep the deepest ancestor we have
+            for pid in pids:
+                resolved.setdefault(pid, []).append((depth, par))
+                container_of[pid] = [par["id"]]
+        print(f"    depth {depth}: {len(by_key)} distinct keys ({len(wanted)} new), "
+              f"{sum(1 for k in by_key if _PARENT_CACHE.get(k))} resolved", flush=True)
+
+    parents_by_pid, relations = {}, {}
+    for pid, entries in resolved.items():
+        _, chain = chains[pid]
+        ids, rels = [], []
+        for depth, par in entries:
+            printed, name = chain[depth]
             ids.append(par["id"])
             rel = {"relationType": "gvp:broaderPartitive", "relationTo": par["id"],
                    "label": par["name"], "when": None}
@@ -491,11 +582,10 @@ def resolve_hierarchy(rows, threshold):
                 rel["sourceLabel"] = printed
                 rel["queriedAs"] = name
             rels.append(rel)
-            container = [par["id"]]        # next level must lie within this parent
         if ids:
-            parents_by_pid[r["place_id"]] = ids
+            parents_by_pid[pid] = ids
         if rels:
-            relations[r["place_id"]] = rels
+            relations[pid] = rels
     return parents_by_pid, relations
 
 
@@ -597,14 +687,36 @@ def fetch_centroids_api(ids, tok):
     return out
 
 
+def _match_flags(conf):
+    """`low_confidence` at twice the acceptance floor. The old `score < 90` test flagged almost
+    nothing, because score is pool-relative and reads ~100 everywhere."""
+    return ["low_confidence"] if (conf is not None and conf < 2 * MIN_CONFIDENCE) else []
+
+
+def _write_matches(con, got, label, relations):
+    """Commit one pass's matches. Called per pass so a long run is inspectable while it runs."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for pid, cand in got.items():
+        lat, lon = cand.get("coords") or (None, None)
+        con.execute("UPDATE place SET whg_match_id=?, whg_score=?, lat=?, lon=?, recon_pass=?, "
+                    "reconciliation=?, status='reconciled', created_at=? WHERE place_id=?",
+                    (cand["id"], cand.get("score"), lat, lon, label,
+                     json.dumps({"pass": label, "candidate": cand,
+                                 "relations": relations.get(pid) or [],
+                                 "flags": _match_flags(cand.get("confidence"))}), now, pid))
+    con.commit()
+
+
 def reconcile(con, rows, backend, threshold, radius_km, concurrency, tok=None, hierarchy=True):
     # Pass 0: resolve admin hierarchies top-down (gateway only) so the leaf passes can be bounded by the
     # parent footprint, and so we can record the chain as LOD relations.
     parents_by_pid, relations = {}, {}
     use_hier = hierarchy and backend == "gateway"
     if use_hier:
-        print("resolving admin hierarchies (top-down, server-side containment) …", flush=True)
-        parents_by_pid, relations = resolve_hierarchy(rows, threshold)
+        warm = load_parent_cache(con)
+        print(f"resolving admin hierarchies (by depth, parallel within each) — "
+              f"{warm} parents restored from cache …", flush=True)
+        parents_by_pid, relations = resolve_hierarchy(rows, threshold, concurrency, con)
         resolved = sum(1 for v in _PARENT_CACHE.values() if v)
         by_mode = {m: sum(1 for v in _PARENT_CACHE.values() if v and v.get("mode") == m)
                    for m in ("exact", "phonetic")}
@@ -639,6 +751,12 @@ def reconcile(con, rows, backend, threshold, radius_km, concurrency, tok=None, h
                if backend == "gateway" else run_pass_api(todo, cfg, radius_km, threshold, concurrency, tok))
         for pid, cand in got.items():
             matched[pid] = (label, cand)
+        # Commit each pass as it lands. A full-corpus run is hours long, and holding every result in
+        # memory until the end meant nothing was inspectable while it ran and a crash lost all of it.
+        # Committing per pass makes `select recon_pass, count(*) …` answerable mid-flight and makes the
+        # run resumable in practice. The API backend fills centroids in a later step, so it is excluded.
+        if backend == "gateway" and got:
+            _write_matches(con, got, label, relations)
         print(f"pass {label:13} on {len(todo):>6}  -> matched {len(got):>5}  "
               f"(cumulative {len(matched)}/{len(name_rows)})", flush=True)
 
@@ -664,13 +782,11 @@ def reconcile(con, rows, backend, threshold, radius_km, concurrency, tok=None, h
         if pid in matched:                   # name-cascade match (non-coord place)
             label, cand = matched[pid]
             lat, lon = cand["coords"] or (None, None)
-            conf = cand.get("confidence")
-            flags = ["low_confidence"] if (conf is not None and conf < 2 * MIN_CONFIDENCE) else []
             con.execute("UPDATE place SET whg_match_id=?, whg_score=?, lat=?, lon=?, recon_pass=?, "
                         "reconciliation=?, status='reconciled', created_at=? WHERE place_id=?",
                         (cand["id"], cand.get("score"), lat, lon, label,
                          json.dumps({"pass": label, "candidate": cand, "relations": rels,
-                                     "flags": flags}), now, pid))
+                                     "flags": _match_flags(cand.get("confidence"))}), now, pid))
         elif cr and not cr["coord_only"]:    # coord-authoritative match (nearest qualifying name match in radius)
             lat, lon = cr["coords"]
             con.execute("UPDATE place SET whg_match_id=?, whg_score=?, lat=?, lon=?, recon_pass='coord-match', "
