@@ -301,8 +301,11 @@
   // is CARTO's Allowed HTTP Origins restriction to this Pages domain.
   const keys = window.WHG_KEYS || {};
   const basemap = keys.carto ? {
+    // The parameter is `key`, NOT `api_key`. Verified by fetching a tile with each and looking at
+    // the image: `api_key` comes back 200 at 19,486 bytes with the watermark still on it, `key`
+    // comes back 200 at 21,529 bytes clean. Both are HTTP 200, so only the pixels tell them apart.
     tiles: ["a", "b"].map(h =>
-      `https://${h}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?api_key=${encodeURIComponent(keys.carto)}`),
+      `https://${h}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=${encodeURIComponent(keys.carto)}`),
     attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
   } : {
     tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
