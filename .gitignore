@@ -42,3 +42,6 @@ data/*.sqlite
 
 # served from the site-assets release (42MB), not git — see process/publish_assets.sh
 docs/geometry.pmtiles
+
+# Reconciliation probe output (regenerate with process/probe_reconcile.py)
+data/probe/
