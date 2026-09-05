@@ -20,8 +20,14 @@ RESULT, unchanged across three runs (2026-09-05: pre-deploy, post-place#241, pos
 Normalised to modern pinyin the same method resolves 18/18. The gap is therefore not phonetic
 similarity but 19th-century transcription convention (Wade-Giles-era orthography against pinyin), and
 the training corpus contains essentially none of it. Confirmed by the indexing side as a DATA problem
-before a model one, and explicitly DE-SCOPED from Symphonym v8, which targets cross-script phonetic
-matching only. Do not budget for this gap closing: design around it.
+before a model one.
+
+⚠️ STATUS REVERSED 2026-09-05, LATER THE SAME DAY. This docstring previously said the gap was
+"explicitly DE-SCOPED from Symphonym v8" and that one should "design around it". That was true when
+written — v8 targeted cross-script phonetic matching only — and it is no longer true: SG has since
+added HISTORIC ORTHOGRAPHY as a second v8 target, so same-script historic transcription IS in scope
+and `Keang-su -> Gansu` is a live acceptance criterion again. Recorded here because the earlier
+sentence was already acted on, and a stale design conclusion is harder to catch than a wrong one.
 
 The lever that does work is a transcription-convention mapping applied as query expansion before the
 phonetic pass — the same shape as the gateway's `derive_name_forms`. `reconcile.py`'s `_ADMIN_ALIASES`
