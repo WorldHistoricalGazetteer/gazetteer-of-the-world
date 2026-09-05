@@ -1,0 +1,90 @@
+{
+ "language": "Russian",
+ "ccode": "RU",
+ "fields": [
+  "modern_cyrillic",
+  "modern_transliteration",
+  "modern_region"
+ ],
+ "field_help": {
+  "modern_cyrillic": "The name in Cyrillic, e.g. Курск",
+  "modern_transliteration": "Standard romanisation, e.g. Kursk",
+  "modern_region": "Oblast / krai / republic, e.g. Kursk Oblast"
+ },
+ "total": 3535,
+ "with_coords": 201,
+ "shards": [
+  {
+   "file": "russian-000.json",
+   "n": 200
+  },
+  {
+   "file": "russian-001.json",
+   "n": 200
+  },
+  {
+   "file": "russian-002.json",
+   "n": 200
+  },
+  {
+   "file": "russian-003.json",
+   "n": 200
+  },
+  {
+   "file": "russian-004.json",
+   "n": 200
+  },
+  {
+   "file": "russian-005.json",
+   "n": 200
+  },
+  {
+   "file": "russian-006.json",
+   "n": 200
+  },
+  {
+   "file": "russian-007.json",
+   "n": 200
+  },
+  {
+   "file": "russian-008.json",
+   "n": 200
+  },
+  {
+   "file": "russian-009.json",
+   "n": 200
+  },
+  {
+   "file": "russian-010.json",
+   "n": 200
+  },
+  {
+   "file": "russian-011.json",
+   "n": 200
+  },
+  {
+   "file": "russian-012.json",
+   "n": 200
+  },
+  {
+   "file": "russian-013.json",
+   "n": 200
+  },
+  {
+   "file": "russian-014.json",
+   "n": 200
+  },
+  {
+   "file": "russian-015.json",
+   "n": 200
+  },
+  {
+   "file": "russian-016.json",
+   "n": 200
+  },
+  {
+   "file": "russian-017.json",
+   "n": 135
+  }
+ ]
+}

@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "Retention tiers for WHG authority namespaces, keyed by the prefix of a `whg_match_id`.",
+    "The tier controls what we may RETAIN from a matched record, never what we may QUERY.",
+    "See LICENSING-POLICY.md for the reasoning; WorldHistoricalGazetteer/place#240 for the origin.",
+    "`license_spdx` values are copied from the indexing repo's own registry",
+    "(processing/settings.py AUTHORITIES), which is authoritative — not from prose.",
+    "Anything absent from this file is treated as tier D (most restrictive). Adding a namespace",
+    "requires reading its actual terms, not guessing from a similar-looking one."
+  ],
+  "_tiers": {
+    "A": "Public domain or attribution-only. Geometry may be retained and published under CC BY 4.0, with attribution.",
+    "B": "Share-alike (ODbL / CC-BY-SA). Query and constrain freely; NEVER retain geometry — it would make our dataset a derivative database.",
+    "C": "Non-commercial or bespoke-restricted. Query and constrain freely; NEVER retain geometry — the restriction is incompatible with CC BY 4.0.",
+    "D": "No-derivatives, or terms unknown. Query and verify only; NEVER retain geometry. Merging is arguably the adaptation the licence forbids.",
+    "E": "Contributed WHG datasets. Tier is whatever the dataset's own recorded licence implies; with no recorded licence, treat as D."
+  },
+  "_generated_from": "WorldHistoricalGazetteer/indexing processing/settings.py, read 2026-09-05",
+  "sources": {
+    "wd":       {"tier": "A", "license_spdx": "CC0-1.0",                  "name": "Wikidata"},
+    "ohm":      {"tier": "A", "license_spdx": "CC0-1.0",                  "name": "OpenHistoricalMap"},
+    "po":       {"tier": "A", "license_spdx": "CC0-1.0",                  "name": "PeriodO"},
+    "gn":       {"tier": "A", "license_spdx": "CC-BY-4.0",                "name": "GeoNames"},
+    "un":       {"tier": "A", "license_spdx": "CC-BY-4.0",                "name": "UN / ISO3166 countries"},
+    "clio":     {"tier": "A", "license_spdx": "CC-BY-4.0",                "name": "Cliopatria (Seshat)"},
+    "ofs":      {"tier": "A", "license_spdx": "CC-BY-4.0",                "name": "Ottoman NFS Gazetteer"},
+    "pl":       {"tier": "A", "license_spdx": "CC-BY-3.0",                "name": "Pleiades"},
+    "tgn":      {"tier": "A", "license_spdx": "ODC-By-1.0",               "name": "Getty TGN"},
+    "ukhc":     {"tier": "A", "license_spdx": "custom-historic-counties", "name": "UK Historic Counties",
+                 "note": "Bespoke terms. Grouped attribution-only in place#240; re-read the terms before any bulk adoption."},
+
+    "osm":      {"tier": "B", "license_spdx": "ODbL-1.0",                 "name": "OpenStreetMap"},
+    "gb":       {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "GB1900"},
+    "iv":       {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "Index Villaris"},
+    "tm":       {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "Trismegistos"},
+    "hgis":     {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "HGIS de las Indias"},
+    "vob_lgd":  {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "Vision of Britain LGD"},
+    "vob_rd":   {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "Vision of Britain RD"},
+    "vob_cty":  {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "Vision of Britain county"},
+    "vob_rc":   {"tier": "B", "license_spdx": "CC-BY-SA-4.0",            "name": "Vision of Britain RC"},
+
+    "chgis":    {"tier": "C", "license_spdx": "custom-chgis-academic",    "name": "CHGIS (China Historical GIS)",
+                 "note": "Academic-use terms. The single most useful source for Qing-era Chinese containment: query and constrain with it, never adopt from it."},
+    "alc":      {"tier": "C", "license_spdx": "CC-BY-NC-4.0",            "name": "Alcedo / TopUrbi"},
+    "og":       {"tier": "C", "license_spdx": "CC-BY-NC-4.0",            "name": "Ottoman Gazetteer"},
+    "dp":       {"tier": "C", "license_spdx": "CC-BY-NC-4.0",            "name": "D-PLACE"},
+    "nl":       {"tier": "C", "license_spdx": "custom-nativeland-dst",    "name": "Native Land Digital",
+                 "note": "Data-sovereignty terms, not a standard licence. Never adopt; cite as a reference only."},
+    "kain_par": {"tier": "C", "license_spdx": "custom-ukds-eul",          "name": "Kain parishes (UKDS)"},
+
+    "dgsd":     {"tier": "D", "license_spdx": "CC-BY-ND-4.0",            "name": "Digital Gazetteer of the Song Dynasty",
+                 "note": "No-derivatives. Merging its geometry into our dataset is arguably the adaptation the licence forbids."},
+
+    "whg":      {"tier": "E", "license_spdx": null,                       "name": "Contributed WHG dataset",
+                 "note": "Per-dataset. Until the contributing dataset's own licence is recorded and read, treat as D."},
+    "loc":      {"tier": "A", "license_spdx": null,                       "name": "Library of Congress",
+                 "note": "Relations only — carries no geometry, so retention never arises."}
+  }
+}
