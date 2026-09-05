@@ -1,3 +1,5 @@
+"""STATUS: DROPPED (2026-09-06, SG) along with the rest of the specialist-review initiative.
+Kept for the CJK/Cyrillic font handling in the PDF path, which was fiddly and is reusable."""
 #!/usr/bin/env python3
 """Build the specialist request pack: one CSV of every Chinese place, and a two-page PDF brief.
 

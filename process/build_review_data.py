@@ -1,3 +1,9 @@
+"""STATUS: THE SPECIALIST-REVIEW INITIATIVE WAS DROPPED (2026-09-06, SG). The Pages UI
+this fed (docs/toponyms/) has been removed and the curated list will not be produced. This script
+is kept only for what it records: the ES query shapes below were arrived at by getting them wrong
+first, and `geometries`/`toponyms` being NESTED (so a bare geo_distance silently matches nothing,
+and the name field is toponyms.label, not toponyms.toponym) is the kind of thing worth not
+rediscovering. Do not re-run it expecting a live page."""
 #!/usr/bin/env python3
 """Generate the data behind the Pages toponym-review UI: a pick-list per place, not a blank form.
 
