@@ -64,6 +64,8 @@
   .free{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
   .free input{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;
               background:var(--bg);color:var(--fg);font:inherit;font-size:14px}
+  .free .wanted input{border-color:var(--accent);background:var(--accent-bg)}
+  .free .wanted .why{font-size:11.5px;color:var(--accent);margin-top:3px;line-height:1.35}
   label.fl{font-size:12px;color:var(--muted);display:block;margin-bottom:2px}
   .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
   button{font:inherit;padding:7px 13px;border-radius:8px;border:1px solid var(--line);
@@ -266,9 +268,22 @@ function render(){
              : `<div class="nocand">No nearby places to offer for this one — the book gave no usable
                 coordinates. Please type the modern name if you recognise it.</div>`}
       <div class="free">
-        ${f.map(k => `<div><label class="fl" for="fl-${k}">${esc(k.replace(/_/g,' '))}
-           <span style="opacity:.65">${esc(help[k]||'')}</span></label>
-           <input id="fl-${k}" data-k="${k}" value="${esc(a[k]||'')}"></div>`).join('')}
+        ${f.map(k => {
+           // The province/region field is normally optional. On a row whose printed coordinates are
+           // missing or corrupt it is the ONLY independent cross-check on the answer — nothing in the
+           // index supplies administrative context for these places (no region, no admin_unit, no
+           // relations), and there is no coordinate to fall back on. So ask for it explicitly there,
+           // and say why, rather than leaving a blank the reviewer has no reason to fill.
+           const isArea = /provin|region|oblast/i.test(k);
+           const wanted = isArea && r.lat == null;
+           return `<div class="${wanted ? 'wanted' : ''}">
+             <label class="fl" for="fl-${k}">${esc(k.replace(/_/g,' '))}
+               <span style="opacity:.65">${esc(help[k]||'')}</span></label>
+             <input id="fl-${k}" data-k="${k}" value="${esc(a[k]||'')}"
+                    ${wanted ? 'placeholder="please fill this one in"' : ''}>
+             ${wanted ? '<div class="why">This entry has no usable coordinates, so the province is the only way we can check the answer independently. Worth a moment even if you are confident.</div>' : ''}
+           </div>`;
+         }).join('')}
       </div>
       <div class="acts">
         <label><input type="checkbox" id="unsure"${a.confident==='guess'?' checked':''}> I am unsure about this one</label>
