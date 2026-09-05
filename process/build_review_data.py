@@ -48,6 +48,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_specialist_pack import PROFILES, PAREN, km  # noqa: E402  — one definition of the profiles
+from review_store import sig  # noqa: E402  — stable across re-parses, unlike a rowid
 
 RADIUS_KM = 30.0
 MAX_CANDS = 10
@@ -128,13 +129,50 @@ def lexical(es, name, variants, ccode):
     return [_cand(h.get("_source") or {}) for h in ((r.get("hits") or {}).get("hits") or [])]
 
 
+ENTRY_CHARS = 1400
+
+
+def _trim(t):
+    """Trim to a sentence boundary near the limit rather than mid-word."""
+    t = re.sub(r"\s+", " ", (t or "")).strip()
+    if len(t) <= ENTRY_CHARS:
+        return t
+    cut = t.rfind(". ", 0, ENTRY_CHARS)
+    return (t[: cut + 1] if cut > ENTRY_CHARS * 0.6 else t[:ENTRY_CHARS].rsplit(" ", 1)[0]) + " …"
+
+
+def order_for_review(places, prof):
+    """Put the rows a specialist can answer fastest, and most representatively, first.
+
+    The first row the page showed was "Asses' Ears" — an English name for a coastal rock with no
+    hierarchy. It is a poor first impression and an unrepresentative task, and it is the same defect
+    already fixed in the CSV pilot selection but not carried across, because the page presented rows
+    in database order. Ordering, best first:
+
+      1. a usable printed coordinate — these get a real spatial pick-list, so they are quick and
+         satisfying, and they are the rows whose answers we can independently verify;
+      2. a stated admin hierarchy — context to reason from;
+      3. for languages whose transcriptions are characteristically hyphenated (Chinese), a hyphen —
+         which separates genuine romanisations from English or Tibetan names in the same territory;
+      4. then alphabetically, so the order is stable across regenerations.
+    """
+    hyph = bool(prof.get("hyphen_only"))
+    return sorted(places, key=lambda p: (
+        p["lat"] is None,
+        not p["hier"],
+        (hyph and "-" not in (p["hw"] or "")),
+        (p["hw"] or "").lower(),
+    ))
+
+
 def load_places(db, ccode, prof):
     lo0, lo1, la0, la1 = prof["bbox"]
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     out = []
     for r in con.execute(
-            "SELECT p.place_id, p.name, p.extraction, e.page_start, s.filename FROM place p "
+            "SELECT p.place_id, p.ordinal, p.name, p.extraction, e.headword_raw, "
+            "e.page_start, e.text, s.filename FROM place p "
             "JOIN entry e ON e.entry_id = p.entry_id JOIN source s ON s.source_id = e.source_id "
             "WHERE p.extraction IS NOT NULL"):
         try:
@@ -153,7 +191,13 @@ def load_places(db, ccode, prof):
             elif not (lo0 <= lon <= lo1 and la0 <= lat <= la1):
                 flags.append("outside_bbox"); lat = lon = None
         out.append({
-            "i": r["place_id"],
+            # STABLE id, not the rowid. `place_id` is a SQLite rowid that a re-parse renumbers, and
+            # this id has to survive a round trip out to a specialist and back — and has to name the
+            # same row for the indexing side's train/test split. Same signature the human-review
+            # sidecar uses: sig(filename, headword_raw, page_start) plus the place's ordinal within
+            # its entry, because one entry can yield several places.
+            "i": sig(r["filename"], r["headword_raw"], r["page_start"]) + f":{r['ordinal']}",
+            "pid": r["place_id"],
             "hw": r["name"],
             "var": [v for v in (ext.get("variant_names") or []) if v][:4],
             "hier": " > ".join(PAREN.sub("", a).strip() for a in (ext.get("admin_hierarchy") or [])),
@@ -161,6 +205,11 @@ def load_places(db, ccode, prof):
             "vol": (re.search(r"-(v\d+)-", r["filename"] or "") or [None, ""])[1],
             "pg": r["page_start"],
             "flags": flags,
+            # The entry as the book printed it. This is the context a specialist actually reasons
+            # from — "a district city of China, in the province of Shan-se, 40 miles SW of ..." often
+            # identifies a place that the headword alone cannot. Trimmed because a few country essays
+            # run to tens of thousands of characters and would dominate the payload.
+            "txt": _trim(r["text"]),
         })
     con.close()
     return out
@@ -179,7 +228,7 @@ def main():
     args = ap.parse_args()
 
     prof = PROFILES[args.ccode]
-    places = load_places(args.db, args.ccode, prof)
+    places = order_for_review(load_places(args.db, args.ccode, prof), prof)
     if args.limit:
         places = places[: args.limit]
     print(f"{args.ccode}: {len(places):,} places; "

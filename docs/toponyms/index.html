@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gazetteer of the World — historic place-name identification</title>
+<link href="../lib/maplibre-gl.css" rel="stylesheet">
+<script src="../lib/maplibre-gl.js"></script>
 <!--
   Static, single page, no build step, no CDNs, no backend — same constraints as the explorer.
   Nothing is uploaded: work is held in the browser (localStorage) and exported as a JSON file the
@@ -31,7 +33,18 @@
   *{box-sizing:border-box}
   body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
        margin:0;padding:0 16px 80px}
-  .wrap{max-width:900px;margin:0 auto}
+  .wrap{max-width:1180px;margin:0 auto}
+  .split{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;align-items:start}
+  .mapcol{position:sticky;top:14px}
+  #map{height:390px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .maplegend{font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .entry{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);
+         border-radius:8px;padding:11px 13px;margin:12px 0;font-family:Georgia,"Times New Roman",serif;
+         font-size:14.5px;line-height:1.55;max-height:230px;overflow:auto}
+  .entry .lbl{font-family:system-ui,sans-serif;font-size:11px;letter-spacing:.06em;
+              text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px}
+  @media (max-width:900px){.split{grid-template-columns:1fr}.mapcol{position:static}#map{height:300px}}
   header{padding:22px 0 10px;border-bottom:1px solid var(--line);margin-bottom:18px}
   h1{font-size:20px;margin:0 0 6px}
   p.lede{color:var(--muted);margin:0;max-width:62ch}
@@ -102,7 +115,17 @@
   <select id="lang"></select>
 </div>
 
-<div id="card"></div>
+<div class="split">
+  <div id="card"></div>
+  <div class="mapcol">
+    <div id="map"></div>
+    <div class="maplegend">
+      <span><i class="sw" style="background:#c0392b"></i>where the book puts it</span>
+      <span><i class="sw" style="background:#7a5c2e"></i>option in the list</span>
+      <span><i class="sw" style="background:#2f6b45"></i>your choice</span>
+    </div>
+  </div>
+</div>
 </div>
 
 <div class="bar">
@@ -117,6 +140,61 @@
 </div>
 
 <script>
+// ── map ──────────────────────────────────────────────────────────────────────
+// OpenStreetMap raster, deliberately: CARTO now requires an API key and serves unkeyed tiles at
+// HTTP 200 with "API KEY REQUIRED" written across them — a failure that looks like success. Any key
+// we used would also have to be origin-scoped to this Pages domain. OSM needs none and always draws.
+let MAP = null, MARKERS = [];
+function initMap(){
+  MAP = new maplibregl.Map({
+    container: 'map',
+    style: {version: 8, sources: {osm: {
+      type: 'raster', tileSize: 256,
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }}, layers: [{id: 'osm', type: 'raster', source: 'osm'}]},
+    center: [100, 35], zoom: 2
+  });
+  MAP.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
+  MAP.addControl(new maplibregl.ScaleControl({maxWidth: 90}), 'bottom-left');
+}
+function pin(colour, title){
+  const el = document.createElement('div');
+  el.style.cssText = `width:13px;height:13px;border-radius:50%;background:${colour};
+    border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35);cursor:pointer`;
+  el.title = title || '';
+  return el;
+}
+function drawMap(r, a){
+  if (!MAP) return;
+  MARKERS.forEach(m => m.remove()); MARKERS = [];
+  const pts = [];
+  if (r.lat != null){
+    MARKERS.push(new maplibregl.Marker({element: pin('#c0392b', 'Where the book places it')})
+      .setLngLat([r.lon, r.lat]).addTo(MAP));
+    pts.push([r.lon, r.lat]);
+  }
+  (r.c || []).forEach((c, i) => {
+    if (!c.pt || c.pt.length < 2 || c.pt[0] == null) return;
+    const chosen = a.pick === i;
+    const m = new maplibregl.Marker({element: pin(chosen ? '#2f6b45' : '#7a5c2e', c.n)})
+      .setLngLat([c.pt[0], c.pt[1]])
+      .setPopup(new maplibregl.Popup({offset: 12, closeButton: false})
+        .setHTML(`<b>${esc(c.n)}</b>${c.s ? ' ' + esc(c.s) : ''}` +
+                 (c.km != null ? `<br><small>${c.km} km from the book's point</small>` : '')))
+      .addTo(MAP);
+    // Clicking the map is the same act as clicking the list — the two must not disagree.
+    m.getElement().addEventListener('click', () => choose(r, i));
+    MARKERS.push(m);
+    pts.push([c.pt[0], c.pt[1]]);
+  });
+  if (pts.length === 1) MAP.easeTo({center: pts[0], zoom: 9, duration: 400});
+  else if (pts.length > 1){
+    const b = pts.reduce((acc, p) => acc.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+    MAP.fitBounds(b, {padding: 46, maxZoom: 11, duration: 400});
+  }
+}
+
 // ── state ────────────────────────────────────────────────────────────────────
 // One answer per place id. Held in localStorage so a closed tab is not lost work, and exported as a
 // JSON file the contributor emails back — there is no server to post to and deliberately so.
@@ -139,6 +217,20 @@ async function loadLang(slug){
   IDX = ROWS.findIndex(r => !ANS[r.i]);          // resume at the first unanswered row
   if (IDX < 0) IDX = 0;
   render();
+}
+
+// ── choosing ─────────────────────────────────────────────────────────────────
+// One code path for both the list and the map, so the two can never disagree about what is selected.
+function choose(r, i){
+  const c = (r.c || [])[i]; if (!c) return;
+  const cur = ANS[r.i] || (ANS[r.i] = {});
+  cur.pick = i; cur.whg_id = c.id;
+  // Prefill from the chosen candidate so the common case needs no typing at all: romanised title
+  // into the first field, native script into whichever field is named for a script.
+  if (!cur[MAN.fields[0]]) cur[MAN.fields[0]] = c.n;
+  const sf = MAN.fields.find(k => /charac|cyrill|script/i.test(k));
+  if (sf && !cur[sf] && c.s) cur[sf] = c.s;
+  save(); render();
 }
 
 // ── rendering ────────────────────────────────────────────────────────────────
@@ -169,6 +261,7 @@ function render(){
     <div class="row-card">
       <div class="hw">${esc(r.hw)}</div>
       <div class="meta">${bits.join(' &middot; ')}</div>
+      ${r.txt ? `<div class="entry"><span class="lbl">The entry, as printed in 1856</span>${esc(r.txt)}</div>` : ''}
       ${opts ? `<div class="opts">${opts}</div>`
              : `<div class="nocand">No nearby places to offer for this one — the book gave no usable
                 coordinates. Please type the modern name if you recognise it.</div>`}
@@ -182,23 +275,16 @@ function render(){
       </div>
     </div>`;
 
-  document.querySelectorAll('.opt').forEach(el => el.addEventListener('click', () => {
-    const i = +el.dataset.i, c = r.c[i];
-    const cur = ANS[r.i] || (ANS[r.i] = {});
-    cur.pick = i; cur.whg_id = c.id;
-    // Prefill the free-text fields from the chosen candidate so the common case needs no typing:
-    // romanised title into the first field, native script into a field whose name suggests script.
-    if (!cur[MAN.fields[0]]) cur[MAN.fields[0]] = c.n;
-    const scriptField = MAN.fields.find(k => /charac|cyrill|script/i.test(k));
-    if (scriptField && !cur[scriptField] && c.s) cur[scriptField] = c.s;
-    save(); render();
-  }));
+  document.querySelectorAll('.opt').forEach(el =>
+    el.addEventListener('click', () => choose(r, +el.dataset.i)));
   document.querySelectorAll('.free input').forEach(el => el.addEventListener('input', () => {
     const cur = ANS[r.i] || (ANS[r.i] = {}); cur[el.dataset.k] = el.value; save();
   }));
   $('unsure').addEventListener('change', e => {
     const cur = ANS[r.i] || (ANS[r.i] = {}); cur.confident = e.target.checked ? 'guess' : 'y'; save();
   });
+
+  drawMap(r, a);
 
   const answered = ROWS.filter(x => ANS[x.i] && (ANS[x.i].pick != null || ANS[x.i].skipped ||
                     MAN.fields.some(k => ANS[x.i][k]))).length;
@@ -223,7 +309,10 @@ $('export').onclick = () => {
     fields: MAN.fields, total: ROWS.length,
     rows: ROWS.map(r => {
       const a = ANS[r.i] || {};
-      const o = { place_id: r.i, headword: r.hw, printed_hierarchy: r.hier,
+      // `id` is the authoritative key: stable across a re-parse and across the round trip to a
+      // specialist and back. `place_id` is our current rowid and is NOT stable — it is carried only
+      // so we can join back to the working DB today, and must never be used as the join key.
+      const o = { id: r.i, place_id: r.pid, headword: r.hw, printed_hierarchy: r.hier,
                   printed_variants: r.var, printed_lat: r.lat, printed_lon: r.lon,
                   volume: r.vol, page: r.pg, coordinate_flags: r.flags || [],
                   answered: false, skipped: !!a.skipped,
@@ -272,6 +361,7 @@ $('file').onchange = async e => {
   $('lang').innerHTML = langs.map(l =>
       `<option value="${l.slug}">${esc(l.m.language)} — ${l.m.total.toLocaleString()} names</option>`).join('');
   $('lang').onchange = e => loadLang(e.target.value);
+  initMap();
   await loadLang(langs[0].slug);
 })();
 </script>
