@@ -68,12 +68,20 @@ def main():
     sample = rows[:a.n]
 
     # Span the cascade deliberately: an easy-query gate passes on a broken endpoint.
-    # Labelled, because WHICH shape diverges is diagnostic. If divergence concentrates in the
-    # lexical shape and is near-absent in the vector-led ones, that points at shard-level term
-    # statistics (a restore purges deleted docs, and deleted-but-unmerged docs still contribute to
-    # IDF, so BM25 scores differ slightly). If it is spread evenly across all three, that
-    # explanation is wrong. NB "phonetic" is blended rather than pure KNN on this gateway, so it is
-    # a weaker contrast than it looks.
+    # Labelled, because WHICH shape diverges is diagnostic. Divergence concentrating in the lexical
+    # shape points at CORPUS STATISTICS differing between the two: BM25 consults them, cosine
+    # similarity does not. Measured 2026-09-06 at 3.2x (p=0.04).
+    #
+    # ⚠ WHAT THAT DOES *NOT* ESTABLISH. Three different mechanisms were proposed for the underlying
+    # difference over one afternoon (deleted docs contributing to IDF; tombstones vanishing on
+    # restore; and the correct one, production merging continuously while staging is frozen so
+    # docCount drifts, and docCount drives IDF). ALL THREE PREDICT THIS SAME RESULT, because all
+    # three are ways of saying corpus statistics differ between source and replica. So this test
+    # discriminates lexical from vector-led retrieval, which is real, and has no power at all to
+    # choose between mechanisms. A result that survives the replacement of its mechanism was never
+    # evidence for that mechanism.
+    #
+    # NB "phonetic" is blended rather than pure KNN here, so the contrast is weaker than it looks.
     shapes = [
         ("exact/lexical", lambda q, cc: {"query": q, "mode": "exact", "size": 10}),
         ("phonetic", lambda q, cc: {"query": q, "mode": "phonetic", "size": 10}),

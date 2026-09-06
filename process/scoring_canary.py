@@ -1,8 +1,9 @@
 """Detect whether the gateway's SCORING changed underneath a long run.
 
 WHY THIS EXISTS. A full re-reconciliation takes ~10 hours against a live service we do not control.
-If anything alters ranking mid-run (a forcemerge expunging deleted docs changes shard-level term
-statistics and therefore BM25 scores; so does a reindex, an alias re-point or a model swap), the
+If anything alters ranking mid-run (any change to corpus statistics moves BM25 scores: ordinary
+segment merging shifts docCount, which drives IDF; so does a reindex, an alias re-point or a model
+swap), the
 first half of the run and the second half were produced by different instruments. The output gives
 no sign of it: every row still looks reasonable, and the corpus-level numbers still add up. It is
 the difference between one measurement and two averaged together, and nothing downstream can
